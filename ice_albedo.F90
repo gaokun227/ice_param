@@ -9,9 +9,10 @@ module ice_albedo_mod
 !
 !=======================================================================
 
-use      utilities_mod, only:  error_mesg, file_exist,  &
-                               check_nml_error, open_file,  &
-                               FATAL, get_my_pe, close_file
+use            fms_mod, only:  error_mesg, file_exist,  &
+                               check_nml_error, open_namelist_file,  &
+                               FATAL, close_file, mpp_pe, mpp_root_pe, &
+                               write_version_number, stdlog
 
 implicit none
 private
@@ -22,8 +23,8 @@ public  ice_albedo, ice_albedo_init
 
 !--------------------- version number ----------------------------------
 
-character(len=128) :: version = '$Id: ice_albedo.F90,v 1.2 2000/07/28 20:17:11 fms Exp $'
-character(len=128) :: tag = '$Name: inchon $'
+character(len=128) :: version = '$Id: ice_albedo.F90,v 10.0 2003/10/24 22:01:06 fms Exp $'
+character(len=128) :: tagname = '$Name: jakarta $'
 
 !=======================================================================
 
@@ -67,7 +68,7 @@ temp_ice_freeze = t_freeze
 !------------------- read namelist input -------------------------------
 
       if (file_exist('input.nml')) then
-         unit = open_file ('input.nml', action='read')
+         unit = open_namelist_file ('input.nml')
          ierr=1; do while (ierr /= 0)
             read  (unit, nml=ice_albedo_nml, iostat=io, end=10)
             ierr = check_nml_error(io,'ice_albedo_nml')
@@ -75,14 +76,12 @@ temp_ice_freeze = t_freeze
   10     call close_file (unit)
       endif
 
-!---------- output namelist to log-------------------------------------
+!------- write version number and namelist ---------
 
-      unit = open_file ('logfile.out', action='append')
-      if ( get_my_pe() == 0 ) then
-           write (unit, '(/,80("="),/(a))') trim(version),trim(tag)
-           write (unit, nml=ice_albedo_nml)
+      if ( mpp_pe() == mpp_root_pe() ) then
+           call write_version_number(version, tagname)
+           write (stdlog(), nml=ice_albedo_nml)
       endif
-      call close_file (unit)
 
   do_init = .false.
 

@@ -3,8 +3,9 @@ module ocean_rough_mod
 
 !-----------------------------------------------------------------------
 
-use utilities_mod, only: error_mesg, FATAL, file_exist, open_file,  &
-                         check_nml_error, get_my_pe, close_file
+use       fms_mod, only: error_mesg, FATAL, file_exist, open_namelist_file,  &
+                         check_nml_error, mpp_pe, mpp_root_pe, close_file, &
+                         write_version_number, stdlog
 use constants_mod, only: grav
 
 implicit none
@@ -13,16 +14,15 @@ private
 public :: compute_ocean_roughness, fixed_ocean_roughness
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_rough.F90,v 1.4 2002/07/16 22:48:06 fms Exp $'
-character(len=256) :: tag = '$Name: inchon $'
+character(len=256) :: version = '$Id: ocean_rough.F90,v 10.0 2003/10/24 22:01:06 fms Exp $'
+character(len=256) :: tagname = '$Name: jakarta $'
 !-----------------------------------------------------------------------
 !----- namelist -----
 
   real    :: roughness_init = 0.00044   ! not used in this version
   real    :: roughness_min  = 1.e-6
   real    :: charnock       = 0.032
-  real    :: rho_atm        = 1.13
-
+  
   real    :: roughness_mom   = 5.8e-5
   real    :: roughness_heat  = 5.8e-5   ! was 4.00e-4
   real    :: roughness_moist = 5.8e-5
@@ -34,7 +34,7 @@ character(len=256) :: tag = '$Name: inchon $'
 
 namelist /ocean_rough_nml/ roughness_init, roughness_heat,  &
                            roughness_mom,  roughness_moist, &
-                           roughness_min,  rho_atm,         &
+                           roughness_min,                   &
                            charnock,                        &
                            rough_scheme
 
@@ -62,11 +62,11 @@ contains
 
 !#######################################################################
 
- subroutine compute_ocean_roughness ( ocean, tau_x, tau_y,  &
+ subroutine compute_ocean_roughness ( ocean, u_star,  &
                                       rough_mom, rough_heat, rough_moist )
 
  logical, intent(in)  :: ocean(:,:)
- real,    intent(in)  :: tau_x(:,:), tau_y(:,:)
+ real,    intent(in)  :: u_star(:,:)
  real,    intent(out) :: rough_mom(:,:), rough_heat(:,:), rough_moist(:,:)
 
 !-----------------------------------------------------------------------
@@ -93,8 +93,7 @@ contains
             trim(rough_scheme) == 'charnock') then
 
       where (ocean)
-          ustar2(:,:) = sqrt(tau_x*tau_x + tau_y*tau_y) / rho_atm
-          ustar2(:,:) = max(gnu*gnu,ustar2(:,:))
+          ustar2(:,:) = max(gnu*gnu,u_star(:,:)*u_star(:,:))          
           xx1(:,:) = gnu / sqrt(ustar2(:,:))
           xx2(:,:) = ustar2(:,:) / grav
       elsewhere
@@ -142,10 +141,6 @@ contains
        rough_mom   = roughness_mom
        rough_heat  = roughness_heat
        rough_moist = roughness_moist
-    elsewhere
-       rough_mom   = 0.0
-       rough_heat  = 0.0
-       rough_moist = 0.0
     endwhere
 
  end subroutine fixed_ocean_roughness
@@ -159,7 +154,7 @@ contains
 !   ----- read and write namelist -----
 
     if ( file_exist('input.nml')) then
-        unit = open_file (file='input.nml', action='read')
+          unit = open_namelist_file ('input.nml')
         ierr=1; do while (ierr /= 0)
            read  (unit, nml=ocean_rough_nml, iostat=io, end=10)
            ierr = check_nml_error(io,'ocean_rough_nml')
@@ -167,11 +162,12 @@ contains
  10     call close_file (unit)
     endif
 
-    unit = open_file ('logfile.out', action='append')
-    if ( get_my_pe() == 0 ) then
-         write (unit,'(/,80("="),/(a))') trim(version), trim(tag)
-         write (unit, nml=ocean_rough_nml)
-         write (unit,11)
+!------- write version number and namelist ---------
+
+    if ( mpp_pe() == mpp_root_pe() ) then
+         call write_version_number(version, tagname)
+         write (stdlog(),nml=ocean_rough_nml)
+         write (stdlog(),11)
     endif
     call close_file (unit)
 

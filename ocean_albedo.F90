@@ -9,8 +9,10 @@ module ocean_albedo_mod
 !
 !=======================================================================
 
-use  utilities_mod, only: open_file, close_file, get_my_pe, get_root_pe, &
-                          error_mesg, file_exist, check_nml_error, FATAL
+use        fms_mod, only: open_namelist_file, close_file, &
+                          error_mesg, file_exist, check_nml_error, FATAL, &
+                          mpp_pe, mpp_root_pe, &
+                          write_version_number, stdlog
 
 implicit none
 private
@@ -18,8 +20,8 @@ private
 public  compute_ocean_albedo
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_albedo.F90,v 1.3 2002/07/16 22:47:35 fms Exp $'
-character(len=256) :: tag = '$Name: inchon $'
+character(len=256) :: version = '$Id: ocean_albedo.F90,v 10.0 2003/10/24 22:01:06 fms Exp $'
+character(len=256) :: tagname = '$Name: jakarta $'
 !-----------------------------------------------------------------------
 
 real    :: const_alb           = 0.10
@@ -244,7 +246,7 @@ where (.not.ocean) albedo = 0.0
       rad2deg = 90./asin(1.0)
 
       if (file_exist('input.nml')) then
-         unit = open_file ('input.nml', action='read')
+         unit = open_namelist_file ('input.nml')
          ierr=1; do while (ierr /= 0)
             read  (unit, nml=ocean_albedo_nml, iostat=io, end=10)
             ierr = check_nml_error(io,'ocean_albedo_nml')
@@ -252,12 +254,12 @@ where (.not.ocean) albedo = 0.0
   10     call close_file (unit)
       endif
 
-      unit = open_file ('logfile.out', action='append')
-      if (get_my_pe() == get_root_pe()) then
-          write (unit,'(/,80("="),/(a))') trim(version), trim(tag)
-          write (unit, nml=ocean_albedo_nml)
+!------- write version number and namelist ---------
+
+      if ( mpp_pe() == mpp_root_pe() ) then
+           call write_version_number(version, tagname)
+           write (stdlog(), nml=ocean_albedo_nml)
       endif
-      call close_file (unit)
 
    if (ocean_albedo_option < 1 .or. ocean_albedo_option > 4)   &
        call error_mesg ('ocean_albedo',                        &
