@@ -11,7 +11,6 @@ module ice_albedo_mod
 
 use      utilities_mod, only:  error_mesg, file_exist,  &
                                check_nml_error, open_file,  &
-                               print_version_number,        &
                                FATAL, get_my_pe, close_file
 
 implicit none
@@ -23,7 +22,8 @@ public  ice_albedo, ice_albedo_init
 
 !--------------------- version number ----------------------------------
 
-character(len=4), parameter :: vers_num = 'v2.2'
+character(len=128) :: version = '$Id: ice_albedo.F90,v 1.2 2000/07/28 20:17:11 fms Exp $'
+character(len=128) :: tag = '$Name: bombay $'
 
 !=======================================================================
 
@@ -78,8 +78,10 @@ temp_ice_freeze = t_freeze
 !---------- output namelist to log-------------------------------------
 
       unit = open_file ('logfile.out', action='append')
-      call print_version_number (unit, 'ice_albedo', vers_num)
-      if ( get_my_pe() == 0 ) write (unit, nml=ice_albedo_nml)
+      if ( get_my_pe() == 0 ) then
+           write (unit, '(/,80("="),/(a))') trim(version),trim(tag)
+           write (unit, nml=ice_albedo_nml)
+      endif
       call close_file (unit)
 
   do_init = .false.
