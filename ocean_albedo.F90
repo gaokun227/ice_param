@@ -20,8 +20,8 @@ private
 public  compute_ocean_albedo
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_albedo.F90,v 10.0 2003/10/24 22:01:06 fms Exp $'
-character(len=256) :: tagname = '$Name: jakarta $'
+character(len=256) :: version = '$Id: ocean_albedo.F90,v 11.0 2004/09/28 19:37:11 fms Exp $'
+character(len=256) :: tagname = '$Name: khartoum $'
 !-----------------------------------------------------------------------
 
 real    :: const_alb           = 0.10
@@ -239,8 +239,8 @@ where (.not.ocean) albedo = 0.0
 
    integer :: unit
    integer :: io ,ierr
-   real,    dimension(size(ocean,1),size(ocean,2)) :: xx
-   integer, dimension(size(ocean,1),size(ocean,2)) :: j1
+   real,    allocatable, dimension(:,:) :: xx
+   integer, allocatable, dimension(:,:) :: j1
    integer :: i,j
 
       rad2deg = 90./asin(1.0)
@@ -268,6 +268,8 @@ where (.not.ocean) albedo = 0.0
    if(ocean_albedo_option == 2) then
      if ( present(ocean) .and. present(lat) ) then
        allocate (alb2(size(lat,1),size(lat,2)))
+       allocate (xx(size(ocean,1),size(ocean,2)))
+       allocate (j1(size(ocean,1),size(ocean,2)))
        xx = (rad2deg*lat + 90.0)/10.0
        j1 = int(xx)
        xx = xx - float(j1)
@@ -278,6 +280,7 @@ where (.not.ocean) albedo = 0.0
            endif
          enddo
        enddo
+       deallocate (xx, j1)
      else
        call error_mesg ('ocean_albedo_init', &
          'ocean_albedo_option = 2 but ocean or lat or both are missing', FATAL)
