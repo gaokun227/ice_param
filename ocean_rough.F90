@@ -14,7 +14,7 @@ public :: compute_ocean_roughness, fixed_ocean_roughness
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id: ocean_rough.F90,v 1.4 2002/07/16 22:48:06 fms Exp $'
-character(len=256) :: tag = '$Name: havana $'
+character(len=256) :: tag = '$Name: inchon $'
 !-----------------------------------------------------------------------
 !----- namelist -----
 

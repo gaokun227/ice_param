@@ -19,7 +19,7 @@ public  compute_ocean_albedo
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id: ocean_albedo.F90,v 1.3 2002/07/16 22:47:35 fms Exp $'
-character(len=256) :: tag = '$Name: havana $'
+character(len=256) :: tag = '$Name: inchon $'
 !-----------------------------------------------------------------------
 
 real    :: const_alb           = 0.10
