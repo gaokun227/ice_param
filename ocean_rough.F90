@@ -14,7 +14,7 @@ public :: compute_ocean_roughness, fixed_ocean_roughness
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id: ocean_rough.F90,v 1.3 2000/11/22 14:37:55 fms Exp $'
-character(len=256) :: tag = '$Name: fez $'
+character(len=256) :: tag = '$Name: galway $'
 !-----------------------------------------------------------------------
 !----- namelist -----
 
