@@ -18,7 +18,7 @@ public  compute_ocean_albedo
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id: ocean_albedo.F90,v 1.2 2000/07/28 20:37:23 fms Exp $'
-character(len=256) :: tag = '$Name: bombay $'
+character(len=256) :: tag = '$Name: calgary $'
 !-----------------------------------------------------------------------
 
 !    ocean surface albedo data

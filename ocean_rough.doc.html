@@ -39,7 +39,8 @@
 <!-- BEGIN DESCRIPTION -->
 <PRE>
      This version calculates the ocean roughness from the magnitude
-     of the wind stress components using the Charnock relation.
+     of the wind stress components using the formulation of Beljaars (1994)
+     or the standard Charnock relation.
      There is also an option for using a uniform roughness (the default).
 
 </PRE>
@@ -67,13 +68,13 @@ use ocean_rough_mod [, only: ocean_rough_init,
                              compute_ocean_roughness,
                              fixed_ocean_roughness    ]
 
-compute_ocean_roughness:  Computes ocean roughness for momentum and 
-                          heat/moisture using wind stress or assigns a
+compute_ocean_roughness:  Computes ocean roughness for heat, moisture,
+                          and momentum using wind stress or assigns a
                           uniform value depending on a flag set through
                           the namelist. This routine calls fixed_ocean_roughness.
 
-fixed_ocean_roughness:    Sets a uniform roughness for both momentum and
-                          heat/moisture. The roughness values may be
+fixed_ocean_roughness:    Sets a uniform roughnesses for heat, moisture,
+                          and momentum. The roughness values may be
                           modified through the namelist. Users should use
                           the routine compute_ocean_roughness if possible.
 
@@ -87,7 +88,7 @@ fixed_ocean_roughness:    Sets a uniform roughness for both momentum and
 <PRE>
 
 <b>call compute_ocean_roughness</b> ( ocean, tau_x, tau_y, 
-                               rough_mom, rough_heat )
+                               rough_mom, rough_heat, rough_moist )
 
 INPUT
 
@@ -105,7 +106,10 @@ OUTPUT
   rough_mom   Surface roughness felt by momentum fields (meters)
                 [real dimension(:,:)]
 
-  rough_heat  Surface roughness felt by heat/moisture fields (meters)
+  rough_heat  Surface roughness felt by heat (temperature) fields (meters)
+                [real dimension(:,:)]
+
+  rough_moist Surface roughness felt by moisture (specific humidity) fields (meters)
                 [real dimension(:,:)]
 
 ----------------------------------------------------------------
@@ -122,7 +126,10 @@ OUTPUT
   rough_mom   Surface roughness felt by momentum fields (meters)
                 [real dimension(:,:)]
 
-  rough_heat  Surface roughness felt by heat/moisture fields (meters)
+  rough_heat  Surface roughness felt by heat (temperature) fields (meters)
+                [real dimension(:,:)]
+
+  rough_moist Surface roughness felt by moisture (specific humidity) fields (meters)
                 [real dimension(:,:)]
 
 </PRE>
@@ -136,14 +143,20 @@ OUTPUT
 
 <b>&ocean_rough_nml</b>
 
-  real    :: charnock       = 0.32      ! constant for the Charnock relation (see notes)
+  real    :: charnock       = 0.032     ! constant for the Charnock relation (see notes)
   real    :: roughness_init = 0.00044   ! not used in this version
   real    :: roughness_min  = 1.e-6     ! smallest allowable roughness
   real    :: rho_atm        = 1.13      ! reference density
 
-  logical :: use_fixed_rough = .true.
+  character :: rough_scheme = 'fixed'   ! possible values include:
+                                        !    = 'fixed'    --> use fixed roughness values
+                                        !    = 'beljaars' --> use Beljaars (1994) scheme
+                                        !    = 'charnock' --> use simple Charnock relation
+
+  logical :: use_fixed_rough = .true.   ! OBSOLETE: use rough_scheme
   real    :: roughness_mom   = 5.8e-5   ! momentum roughness when use_fixed_rough = .true.
   real    :: roughness_heat  = 5.8e-5   ! heat/moisture roughness when use_fixed_rough = .true.
+  real    :: roughness_moist = 5.8e-5   ! heat/moisture roughness when use_fixed_rough = .true.
 
 </PRE>
 </A><!-- END NAMELIST -->
@@ -170,7 +183,13 @@ OUTPUT
 <!-- BEGIN ERRORS -->
 <PRE>
 
-     None.
+<b>FATAL error in ocean_rough_mod</b>
+
+    <b>namelist option USE_FIXED_ROUGH should be replaced with variable ROUGH_SCHEME</b>
+        Do not use namelist variable USE_FIXED_ROUGH.
+        This variable will be phased out in future revisions.
+        The variable ROUGH_SCHEME (a character string) should be use instead.
+        See the <a href="ocean_rough.doc.html#NAMELIST">namelist documentation</a> for details.
 
 </PRE>
 </A><!-- END ERRORS -->
@@ -181,7 +200,9 @@ OUTPUT
 <!-- BEGIN REFERENCES -->
 <PRE>
 
-     None.
+     Miller, M.J., et. al., 1992. J. of Climate, 418-434.
+
+     Beljaars, A. C. M., 1994. QJRMS, 255-270.
 
 </PRE>
 </A><!-- END REFERENCES -->
@@ -203,15 +224,15 @@ OUTPUT
 <!-- BEGIN NOTES -->
 <PRE>
 
-  Roughness is computed as
+  u_star**2 is computed from wind stress components (Tx,Ty) as
 
-                      charnock
-      roughness = ------------------ * SQRT ( Tx**2 + Ty**2 )
-                    grav * rho_atm
+  u_star**2 = SQRT ( Tx**2 + Ty**2 ) / rho_atm
 
-  where,  charnock and rho_atm are specified through the namelist
-          grav is the gravitational constant (from the constants_mod)
-          Tx,Ty are the wind stress components
+  u_star**2 = MAX ( gnu**2 , u_star**2 )
+
+  where: rho_atm is a constant reference density (see namelist)
+         gnu is the kinematic viscosity for air in m/s2 (1.5e-5)
+
 
 </PRE>
 </A><!-- END NOTES -->
