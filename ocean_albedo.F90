@@ -9,7 +9,8 @@ module ocean_albedo_mod
 !
 !=======================================================================
 
-use  utilities_mod, only: open_file, close_file, get_my_pe
+use  utilities_mod, only: open_file, close_file, get_my_pe, get_root_pe, &
+                          error_mesg, file_exist, check_nml_error, FATAL
 
 implicit none
 private
@@ -17,11 +18,35 @@ private
 public  compute_ocean_albedo
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_albedo.F90,v 1.2 2000/07/28 20:37:23 fms Exp $'
-character(len=256) :: tag = '$Name: galway $'
+character(len=256) :: version = '$Id: ocean_albedo.F90,v 1.3 2002/07/16 22:47:35 fms Exp $'
+character(len=256) :: tag = '$Name: havana $'
 !-----------------------------------------------------------------------
 
+real    :: const_alb           = 0.10
+integer :: ocean_albedo_option = 1
+
+namelist /ocean_albedo_nml/  ocean_albedo_option, &
+                             const_alb
+
+! ocean_albedo_option = 1 : used by GFDL Experimental Prediction Group
+!                           in 80s and 90s; source not currently documented
+!                           (tabulated dependence on zenith angle)
+!
+! ocean_albedo_option = 2 : used by GFDL Climate Dynamics Group in 80s and 90s
+!                           source not currently documented
+!                           (tabulated dependence on latitude)
+!
+! ocean_albedo_option = 3 : simple analytic dependence on zenith angle
+!                           used by J. E. Taylor, et. al., 
+!                           QJRMS, 1996, Vol. 122, 839-861
+!                           albedo = 0.037/[1.1*(cos(Z)**1.4) + 0.15]
+!
+! ocean_albedo_option = 4 : constant uniform albedo 
+!                           set by namelist variable const_alb
+
 !    ocean surface albedo data
+
+!    data used for option 1
 
          real, dimension(21,20) :: albedo_data
          real, dimension(21)    :: trn
@@ -29,6 +54,14 @@ character(len=256) :: tag = '$Name: galway $'
          real, dimension(19)    :: dza
          real :: rad2deg
       logical :: first = .true.
+
+!    data used for option 2
+
+         real, dimension(19) :: albedo_mcm
+         real, allocatable, dimension(:,:) :: alb2
+
+!=======================================================================
+
 
       data  albedo_data (1:21,1:7)                                     &
              / .061,.062,.072,.087,.115,.163,.235,.318,.395,.472,.542, &
@@ -80,18 +113,23 @@ character(len=256) :: tag = '$Name: galway $'
 
       data  dza (1:19) /8*2.0,6*4.0,5*10.0/
 
+      data albedo_mcm (1:19)                                              &
+         / 0.206, 0.161, 0.110, 0.097, 0.089, 0.076, 0.068, 0.063,        &
+         3*0.060,  0.063, 0.068, 0.076, 0.089, 0.097, 0.110, 0.161, 0.206 / 
+
 !=======================================================================
 
 contains
 
 !#######################################################################
 
-   subroutine compute_ocean_albedo (ocean, coszen, albedo)
+   subroutine compute_ocean_albedo (ocean, coszen, albedo, lat)
 
 !-----------------------------------------------------------------------
 ! input
 !     ocean  = logical flag; = true if ocean point
 !     coszen = cosine of zenith angle (in radians)
+!     lat    = latitude (radians)
 !
 !  output
 !     albedo = surface albedo
@@ -99,11 +137,14 @@ contains
       logical, intent(in)  ::  ocean(:,:)
       real,    intent(in)  :: coszen(:,:)
       real,    intent(out) :: albedo(:,:)
+      real,    intent(in), optional :: lat(:,:)
 !-----------------------------------------------------------------------
 
    real, dimension(size(ocean,1),size(ocean,2)) :: trans, zen,  &
                                                    dz, dt, dzdt
 integer, dimension(size(ocean,1),size(ocean,2)) :: i1, j1
+
+   real, dimension(size(ocean,1),size(ocean,2)) :: cos14
 
       integer :: i, j
 
@@ -111,7 +152,9 @@ integer, dimension(size(ocean,1),size(ocean,2)) :: i1, j1
 !------------ calculate surface albedo over open water -----------------
 !-----------------------------------------------------------------------
 
-   if (first) call ocean_albedo_init
+   if (first) call ocean_albedo_init(ocean,lat)
+
+if(ocean_albedo_option == 1) then
 
    trans = 0.537
 
@@ -158,24 +201,88 @@ integer, dimension(size(ocean,1),size(ocean,2)) :: i1, j1
    enddo
    enddo
 
+endif
+
+if(ocean_albedo_option == 2) then
+  albedo = alb2
+endif
+
+if(ocean_albedo_option == 3) then
+
+   where(coszen .ne. 0.0) 
+      cos14 = coszen**1.4
+   elsewhere
+      cos14 = 0.0
+   endwhere
+
+   where(ocean)
+      albedo = 0.037/(1.1*cos14 + 0.15)
+   endwhere
+
+endif
+
+if(ocean_albedo_option == 4) albedo = const_alb
+
+where (.not.ocean) albedo = 0.0
+   
 !-----------------------------------------------------------------------
 
    end subroutine compute_ocean_albedo
 
 !#######################################################################
 
-   subroutine ocean_albedo_init
+   subroutine ocean_albedo_init(ocean,lat)
+   logical, intent(in), optional :: ocean(:,:)
+   real,    intent(in), optional :: lat(:,:)
 
    integer :: unit
+   integer :: io ,ierr
+   real,    dimension(size(ocean,1),size(ocean,2)) :: xx
+   integer, dimension(size(ocean,1),size(ocean,2)) :: j1
+   integer :: i,j
 
       rad2deg = 90./asin(1.0)
 
+      if (file_exist('input.nml')) then
+         unit = open_file ('input.nml', action='read')
+         ierr=1; do while (ierr /= 0)
+            read  (unit, nml=ocean_albedo_nml, iostat=io, end=10)
+            ierr = check_nml_error(io,'ocean_albedo_nml')
+         enddo
+  10     call close_file (unit)
+      endif
+
       unit = open_file ('logfile.out', action='append')
-      if (get_my_pe() == 0) &
+      if (get_my_pe() == get_root_pe()) then
           write (unit,'(/,80("="),/(a))') trim(version), trim(tag)
+          write (unit, nml=ocean_albedo_nml)
+      endif
       call close_file (unit)
 
-      first   = .false.
+   if (ocean_albedo_option < 1 .or. ocean_albedo_option > 4)   &
+       call error_mesg ('ocean_albedo',                        &
+                        'ocean_albedo_option must = 1,2,3 or 4', FATAL)
+
+   if(ocean_albedo_option == 2) then
+     if ( present(ocean) .and. present(lat) ) then
+       allocate (alb2(size(lat,1),size(lat,2)))
+       xx = (rad2deg*lat + 90.0)/10.0
+       j1 = int(xx)
+       xx = xx - float(j1)
+       do j = 1, size(ocean,2)
+         do i = 1, size(ocean,1)
+           if (ocean(i,j)) then
+             alb2(i,j) = albedo_mcm(j1(i,j)+1) + xx(i,j)*(albedo_mcm(j1(i,j)+2) - albedo_mcm(j1(i,j)+1))
+           endif
+         enddo
+       enddo
+     else
+       call error_mesg ('ocean_albedo_init', &
+         'ocean_albedo_option = 2 but ocean or lat or both are missing', FATAL)
+     endif
+   endif
+
+   first   = .false.
 
    end subroutine ocean_albedo_init
 

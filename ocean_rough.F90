@@ -13,8 +13,8 @@ private
 public :: compute_ocean_roughness, fixed_ocean_roughness
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_rough.F90,v 1.3 2000/11/22 14:37:55 fms Exp $'
-character(len=256) :: tag = '$Name: galway $'
+character(len=256) :: version = '$Id: ocean_rough.F90,v 1.4 2002/07/16 22:48:06 fms Exp $'
+character(len=256) :: tag = '$Name: havana $'
 !-----------------------------------------------------------------------
 !----- namelist -----
 
@@ -27,10 +27,6 @@ character(len=256) :: tag = '$Name: galway $'
   real    :: roughness_heat  = 5.8e-5   ! was 4.00e-4
   real    :: roughness_moist = 5.8e-5
 
-  logical           :: use_fixed_rough = .true. ! for backward
-                                                !     compatibility
-                                                !
-                                                !
   character(len=32) :: rough_scheme = 'fixed'   ! possible values:
                                                 !   'fixed'
                                                 !   'charnock'
@@ -40,7 +36,7 @@ namelist /ocean_rough_nml/ roughness_init, roughness_heat,  &
                            roughness_mom,  roughness_moist, &
                            roughness_min,  rho_atm,         &
                            charnock,                        &
-                           rough_scheme,   use_fixed_rough
+                           rough_scheme
 
 !-----------------------------------------------------------------------
 
@@ -178,15 +174,6 @@ contains
          write (unit,11)
     endif
     call close_file (unit)
-
-!    print an error message if the default value of
-!    use_fixed_rough has changed
-
-    if (.not.use_fixed_rough) then
-       call error_mesg ('ocean_rough_mod',  &
-                        'namelist option USE_FIXED_ROUGH should be &
-                        &replaced with variable ROUGH_SCHEME', FATAL)
-    endif
 
 !------ constants -----
 
