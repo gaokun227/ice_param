@@ -21,7 +21,7 @@ public  compute_ocean_albedo
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id: ocean_albedo.F90,v 11.0 2004/09/28 19:37:11 fms Exp $'
-character(len=256) :: tagname = '$Name: khartoum $'
+character(len=256) :: tagname = '$Name: lima $'
 !-----------------------------------------------------------------------
 
 real    :: const_alb           = 0.10
