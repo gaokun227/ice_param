@@ -20,8 +20,8 @@ private
 public  compute_ocean_albedo
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_albedo.F90,v 11.0 2004/09/28 19:37:11 fms Exp $'
-character(len=256) :: tagname = '$Name: lima $'
+character(len=256) :: version = '$Id: ocean_albedo.F90,v 13.0 2006/03/28 21:20:57 fms Exp $'
+character(len=256) :: tagname = '$Name: memphis $'
 !-----------------------------------------------------------------------
 
 real    :: const_alb           = 0.10
@@ -45,6 +45,15 @@ namelist /ocean_albedo_nml/  ocean_albedo_option, &
 !
 ! ocean_albedo_option = 4 : constant uniform albedo 
 !                           set by namelist variable const_alb
+!
+! ocean_albedo_option = 5 : separate treatment of dif/dir shortwave using
+!                           NCAR CCMS3.0 scheme (Briegleb et al, 1986,
+!                           J. Clim. and Appl. Met., v. 27, 214-226)
+
+  interface compute_ocean_albedo
+     module procedure compute_ocean_albedo_old ! obsolete - remove later
+     module procedure compute_ocean_albedo_new
+  end interface
 
 !    ocean surface albedo data
 
@@ -125,7 +134,7 @@ contains
 
 !#######################################################################
 
-   subroutine compute_ocean_albedo (ocean, coszen, albedo, lat)
+   subroutine compute_ocean_albedo_old (ocean, coszen, albedo, lat)
 
 !-----------------------------------------------------------------------
 ! input
@@ -225,11 +234,157 @@ endif
 
 if(ocean_albedo_option == 4) albedo = const_alb
 
+if (ocean_albedo_option == 5) then
+   call error_mesg ('ocean_albedo', &
+          'ocean_albedo_option=5 requires new compute_ocean_albedo interface', &
+          FATAL)
+endif
+
 where (.not.ocean) albedo = 0.0
    
 !-----------------------------------------------------------------------
 
-   end subroutine compute_ocean_albedo
+   end subroutine compute_ocean_albedo_old
+
+!#######################################################################
+   subroutine compute_ocean_albedo_new (ocean, coszen, albedo_vis_dir, &
+                albedo_vis_dif, albedo_nir_dir, albedo_nir_dif, lat)
+
+!-----------------------------------------------------------------------
+! input
+!     ocean  = logical flag; = true if ocean point
+!     coszen = cosine of zenith angle (in radians)
+!     lat    = latitude (radians)
+!
+!  output
+!     albedo = surface albedo
+!-----------------------------------------------------------------------
+      logical, intent(in)  ::  ocean(:,:)
+      real,    intent(in)  :: coszen(:,:)
+      real,    intent(out) :: albedo_vis_dir(:,:)
+      real,    intent(out) :: albedo_vis_dif(:,:)
+      real,    intent(out) :: albedo_nir_dir(:,:)
+      real,    intent(out) :: albedo_nir_dif(:,:)
+      real,    intent(in), optional :: lat(:,:)
+!-----------------------------------------------------------------------
+
+   real, dimension(size(ocean,1),size(ocean,2)) :: trans, zen,  &
+                                                   dz, dt, dzdt
+integer, dimension(size(ocean,1),size(ocean,2)) :: i1, j1
+
+   real, dimension(size(ocean,1),size(ocean,2)) :: cos14
+
+      integer :: i, j
+
+!-----------------------------------------------------------------------
+!------------ calculate surface albedo over open water -----------------
+!-----------------------------------------------------------------------
+
+   if (first) call ocean_albedo_init(ocean,lat)
+
+if(ocean_albedo_option == 1) then
+
+   trans = 0.537
+
+   where (ocean)
+      zen = acos(coszen) * rad2deg
+   elsewhere
+      zen = 0.0
+   endwhere
+
+!---- set up interpolation indices ----
+
+   where (ocean) i1 = 20.*trans + 1.
+
+   where (ocean .and. zen >= 74.) j1 = 0.50*(90.-zen) + 1.
+   where (ocean .and. zen <  50.) j1 = 0.10*(50.-zen) + 15.
+
+   where (ocean .and. zen <  74.  &
+                .and. zen >= 50.) j1 = 0.25*(74.-zen) + 9.
+
+
+!---- do interpolation -----
+
+   do j = 1, size(ocean,2)
+   do i = 1, size(ocean,1)
+
+      if (ocean(i,j)) then
+          dz(i,j)   = -(zen(i,j)-za(j1(i,j)))/dza(j1(i,j))
+          dt(i,j)   = 20.*(trans(i,j)-trn(i1(i,j)))
+          dzdt(i,j) = dz(i,j) * dt(i,j)
+
+          albedo_vis_dir(i,j) = albedo_data(i1(i,j)  ,j1(i,j)  ) *    &
+                                       (1.-dz(i,j)-dt(i,j)+dzdt(i,j)) &
+                      + albedo_data(i1(i,j)+1,j1(i,j)  ) *            &
+                                       (dt(i,j)-dzdt(i,j))            &
+                      + albedo_data(i1(i,j)  ,j1(i,j)+1) *            &
+                                       (dz(i,j)-dzdt(i,j))            &
+                      + albedo_data(i1(i,j)+1,j1(i,j)+1) *  dzdt(i,j)
+       else
+          albedo_vis_dir(i,j) = 0.0
+       endif
+       albedo_vis_dif(i,j) = albedo_vis_dir(i,j)
+       albedo_nir_dir(i,j) = albedo_vis_dir(i,j)
+       albedo_nir_dif(i,j) = albedo_vis_dir(i,j)
+
+   enddo
+   enddo
+
+endif
+
+if(ocean_albedo_option == 2) then
+  albedo_vis_dir = alb2
+  albedo_vis_dif = alb2
+  albedo_nir_dir = alb2
+  albedo_nir_dif = alb2
+endif
+
+if(ocean_albedo_option == 3) then
+
+   where(coszen .ne. 0.0) 
+      cos14 = coszen**1.4
+   elsewhere
+      cos14 = 0.0
+   endwhere
+
+   where(ocean)
+      albedo_vis_dir = 0.037/(1.1*cos14 + 0.15)
+   endwhere
+   albedo_vis_dif = albedo_vis_dir ! this is wrong, use albedo_option=5
+   albedo_nir_dir = albedo_vis_dir
+   albedo_nir_dif = albedo_vis_dir ! this is wrong, use albedo_option=5
+
+endif
+
+if(ocean_albedo_option == 4) then
+  albedo_vis_dir = const_alb
+  albedo_vis_dif = const_alb
+  albedo_nir_dir = const_alb
+  albedo_nir_dif = const_alb
+endif
+
+if (ocean_albedo_option == 5) then
+  where (coszen .ge. 0.0)
+    albedo_vis_dir = 0.026/(coszen**1.7+0.065)                  &
+                    +0.15*(coszen-0.10)*(coszen-0.5)*(coszen-1.0)
+  elsewhere
+    albedo_vis_dir = 0.4075 ! coszen=0 value of above expression
+  endwhere
+  albedo_vis_dif = 0.06
+  albedo_nir_dir = albedo_vis_dir
+  albedo_nir_dif = 0.06
+endif
+
+where (.not.ocean)
+  albedo_vis_dir = 0.0
+  albedo_vis_dif = 0.0
+  albedo_nir_dir = 0.0
+  albedo_nir_dif = 0.0
+end where
+   
+!-----------------------------------------------------------------------
+
+   end subroutine compute_ocean_albedo_new
 
 !#######################################################################
 
@@ -261,9 +416,9 @@ where (.not.ocean) albedo = 0.0
            write (stdlog(), nml=ocean_albedo_nml)
       endif
 
-   if (ocean_albedo_option < 1 .or. ocean_albedo_option > 4)   &
+   if (ocean_albedo_option < 1 .or. ocean_albedo_option > 5)   &
        call error_mesg ('ocean_albedo',                        &
-                        'ocean_albedo_option must = 1,2,3 or 4', FATAL)
+                        'ocean_albedo_option must = 1,2,3,4 or 5', FATAL)
 
    if(ocean_albedo_option == 2) then
      if ( present(ocean) .and. present(lat) ) then
