@@ -24,7 +24,7 @@ public  ice_albedo, ice_albedo_init
 !--------------------- version number ----------------------------------
 
 character(len=128) :: version = '$Id: ice_albedo.F90,v 10.0 2003/10/24 22:01:06 fms Exp $'
-character(len=128) :: tagname = '$Name: nalanda_2007_06 $'
+character(len=128) :: tagname = '$Name: omsk $'
 
 !=======================================================================
 
