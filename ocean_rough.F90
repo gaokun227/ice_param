@@ -14,8 +14,8 @@ private
 public :: compute_ocean_roughness, fixed_ocean_roughness
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_rough.F90,v 10.0 2003/10/24 22:01:06 fms Exp $'
-character(len=256) :: tagname = '$Name: perth_2008_10 $'
+character(len=256) :: version = '$Id: ocean_rough.F90,v 17.0 2009/07/21 03:01:34 fms Exp $'
+character(len=256) :: tagname = '$Name: quebec $'
 !-----------------------------------------------------------------------
 !----- namelist -----
 
@@ -166,10 +166,10 @@ contains
 
     if ( mpp_pe() == mpp_root_pe() ) then
          call write_version_number(version, tagname)
-         write (stdlog(),nml=ocean_rough_nml)
-         write (stdlog(),11)
+         unit = stdlog()
+         write (unit,nml=ocean_rough_nml)
+         write (unit,11)
     endif
-    call close_file (unit)
 
 !------ constants -----
 

@@ -20,8 +20,8 @@ private
 public  compute_ocean_albedo, compute_ocean_albedo_new
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_albedo.F90,v 16.0 2008/07/30 22:12:15 fms Exp $'
-character(len=256) :: tagname = '$Name: perth_2008_10 $'
+character(len=256) :: version = '$Id: ocean_albedo.F90,v 17.0 2009/07/21 03:01:31 fms Exp $'
+character(len=256) :: tagname = '$Name: quebec $'
 !-----------------------------------------------------------------------
 
 real    :: const_alb           = 0.10
@@ -413,7 +413,8 @@ end where
 
       if ( mpp_pe() == mpp_root_pe() ) then
            call write_version_number(version, tagname)
-           write (stdlog(), nml=ocean_albedo_nml)
+           unit = stdlog()
+           write (unit, nml=ocean_albedo_nml)
       endif
 
    if (ocean_albedo_option < 1 .or. ocean_albedo_option > 5)   &
