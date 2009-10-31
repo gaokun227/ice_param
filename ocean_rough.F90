@@ -15,7 +15,7 @@ public :: compute_ocean_roughness, fixed_ocean_roughness
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id: ocean_rough.F90,v 17.0 2009/07/21 03:01:34 fms Exp $'
-character(len=256) :: tagname = '$Name: quebec $'
+character(len=256) :: tagname = '$Name: quebec_200910 $'
 !-----------------------------------------------------------------------
 !----- namelist -----
 
