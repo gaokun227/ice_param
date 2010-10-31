@@ -3,7 +3,13 @@ module ocean_rough_mod
 
 !-----------------------------------------------------------------------
 
-use       fms_mod, only: error_mesg, FATAL, file_exist, open_namelist_file,  &
+#ifdef INTERNAL_FILE_NML
+use          mpp_mod, only: input_nml_file
+#else
+use          fms_mod, only: open_namelist_file
+#endif
+
+use       fms_mod, only: error_mesg, FATAL, file_exist,  &
                          check_nml_error, mpp_pe, mpp_root_pe, close_file, &
                          write_version_number, stdlog
 use constants_mod, only: grav
@@ -14,8 +20,8 @@ private
 public :: compute_ocean_roughness, fixed_ocean_roughness
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_rough.F90,v 18.0 2010/03/02 23:36:08 fms Exp $'
-character(len=256) :: tagname = '$Name: riga_201006 $'
+character(len=256) :: version = '$Id: ocean_rough.F90,v 18.0.4.1 2010/09/14 19:29:20 pjp Exp $'
+character(len=256) :: tagname = '$Name: riga_201012 $'
 !-----------------------------------------------------------------------
 !----- namelist -----
 
@@ -206,6 +212,10 @@ contains
 
 !   ----- read and write namelist -----
 
+#ifdef INTERNAL_FILE_NML
+  read (input_nml_file, nml=ocean_rough_nml, iostat=io)
+  ierr = check_nml_error(io, 'ocean_rough_nml')
+#else
     if ( file_exist('input.nml')) then
           unit = open_namelist_file ('input.nml')
         ierr=1; do while (ierr /= 0)
@@ -214,6 +224,7 @@ contains
         enddo
  10     call close_file (unit)
     endif
+#endif
 
 !------- write version number and namelist ---------
 

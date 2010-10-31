@@ -9,7 +9,13 @@ module ocean_albedo_mod
 !
 !=======================================================================
 
-use        fms_mod, only: open_namelist_file, close_file, &
+#ifdef INTERNAL_FILE_NML
+use          mpp_mod, only: input_nml_file
+#else
+use          fms_mod, only: open_namelist_file
+#endif
+
+use        fms_mod, only: close_file, &
                           error_mesg, file_exist, check_nml_error, FATAL, &
                           mpp_pe, mpp_root_pe, &
                           write_version_number, stdlog
@@ -20,8 +26,8 @@ private
 public  compute_ocean_albedo, compute_ocean_albedo_new
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_albedo.F90,v 17.0 2009/07/21 03:01:31 fms Exp $'
-character(len=256) :: tagname = '$Name: riga_201006 $'
+character(len=256) :: version = '$Id: ocean_albedo.F90,v 17.0.6.1 2010/09/14 19:28:55 pjp Exp $'
+character(len=256) :: tagname = '$Name: riga_201012 $'
 !-----------------------------------------------------------------------
 
 real    :: const_alb           = 0.10
@@ -400,6 +406,10 @@ end where
 
       rad2deg = 90./asin(1.0)
 
+#ifdef INTERNAL_FILE_NML
+  read (input_nml_file, nml=ocean_albedo_nml, iostat=io)
+  ierr = check_nml_error(io, 'ocean_albedo_nml')
+#else
       if (file_exist('input.nml')) then
          unit = open_namelist_file ('input.nml')
          ierr=1; do while (ierr /= 0)
@@ -408,6 +418,7 @@ end where
          enddo
   10     call close_file (unit)
       endif
+#endif
 
 !------- write version number and namelist ---------
 
