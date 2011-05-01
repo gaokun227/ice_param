@@ -27,7 +27,7 @@ public  compute_ocean_albedo, compute_ocean_albedo_new
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id: ocean_albedo.F90,v 17.0.6.1 2010/09/14 19:28:55 pjp Exp $'
-character(len=256) :: tagname = '$Name: riga_201012 $'
+character(len=256) :: tagname = '$Name: riga_201104 $'
 !-----------------------------------------------------------------------
 
 real    :: const_alb           = 0.10

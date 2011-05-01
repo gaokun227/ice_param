@@ -21,7 +21,7 @@ public :: compute_ocean_roughness, fixed_ocean_roughness
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id: ocean_rough.F90,v 18.0.4.1 2010/09/14 19:29:20 pjp Exp $'
-character(len=256) :: tagname = '$Name: riga_201012 $'
+character(len=256) :: tagname = '$Name: riga_201104 $'
 !-----------------------------------------------------------------------
 !----- namelist -----
 
