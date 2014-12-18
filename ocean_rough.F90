@@ -20,8 +20,8 @@ private
 public :: compute_ocean_roughness, fixed_ocean_roughness
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_rough.F90,v 19.0 2012/01/06 20:37:13 fms Exp $'
-character(len=256) :: tagname = '$Name: tikal_201409 $'
+character(len=256) :: version = '$Id: ocean_rough.F90,v 21.0 2014/12/15 21:49:52 fms Exp $'
+character(len=256) :: tagname = '$Name: ulm $'
 !-----------------------------------------------------------------------
 !----- namelist -----
 
@@ -38,6 +38,8 @@ character(len=256) :: tagname = '$Name: tikal_201409 $'
 ! real, parameter :: zcoq1 = 1.3e-4
   real            :: zcoh1 = 0.0 !miz
   real            :: zcoq1 = 0.0 !miz
+  real            :: v10m  = 32.5 !jhc
+  real            :: v10n  = 17.5 !jhc
   logical :: do_highwind     = .false.
   logical :: do_cap40        = .false.
 
@@ -51,7 +53,8 @@ namelist /ocean_rough_nml/ roughness_init, roughness_heat,  &
                            roughness_min,                   &
                            charnock,                        &
                            rough_scheme, do_highwind,       &!miz
-                           do_cap40, zcoh1, zcoq1            !sjl
+                           do_cap40, zcoh1, zcoq1,          &!sjl
+                           v10m, v10n                        !jhc
 
 
 !-----------------------------------------------------------------------
@@ -87,7 +90,8 @@ contains
 !-----------------------------------------------------------------------
 
    real, dimension(size(ocean,1),size(ocean,2)) :: ustar2, xx1, xx2, w10 !miz
-   real ::  a=0.001, b=0.028 !miz
+   real:: zt1
+   integer :: i, j
 
    if (do_init) call ocean_rough_init
 
@@ -123,53 +127,33 @@ contains
               rough_moist(:,:) = rough_mom  (:,:)
           endwhere
       else if (trim(rough_scheme) == 'beljaars') then
-!     --- Beljaars scheme ---
-
-! SJL*** High Wind correction following Moon et al 2007 ***
-          if (do_highwind) then
-
-              if ( do_cap40 ) then
-     
-              where (ocean)
-                  w10(:,:) = 2.458 + u_star(:,:)*(20.255-0.56*u_star(:,:))  ! Eq(7) Moon et al.
-                  where ( w10(:,:) > 12.5 )
+! --- SJL ---- High Wind correction following Moon et al 2007 ------
+          if (do_highwind) then       !  Moon et al. formular
+              do j=1,size(ocean,2)
+                 do i=1,size(ocean,1)
+                    if ( ocean(i,j) ) then
+                      w10(i,j) = 2.458 + u_star(i,j)*(20.255-0.56*u_star(i,j))  ! Eq(7) Moon et al.
+                      if ( w10(i,j) > 12.5 ) then
+                           rough_mom(i,j) = 0.001*(0.085*w10(i,j) - 0.58)    ! Eq(8b) Moon et al.
 ! SJL mods: cap the growth of z0 with w10 up to 40 m/s
-!                     rough_mom(:,:) = 0.001*(0.085*min(w10(:,:), 40.) - 0.58)    ! capped Eq(8b) Moon et al.
 ! z0 (w10=40) = 2.82E-3
-                      rough_mom(:,:) = 0.001*(0.085*w10(:,:) - 0.58)    ! Eq(8b) Moon et al.
-                      rough_mom(:,:) = min( rough_mom(:,:), 2.82E-3)
-                  elsewhere     
-                      rough_mom(:,:) = 0.0185/grav*u_star(:,:)**2  ! (8a) Moon et al.
-                  endwhere
-                  rough_heat (:,:) = zcoh1 * xx2(:,:) + zcoh2 * xx1(:,:)
-                  rough_moist(:,:) = zcoq1 * xx2(:,:) + zcoq2 * xx1(:,:)
-!             --- lower limit on roughness? ---
-                  rough_mom  (:,:) = max( rough_mom  (:,:), roughness_min )
-                  rough_heat (:,:) = max( rough_heat (:,:), roughness_min )
-                  rough_moist(:,:) = max( rough_moist(:,:), roughness_min )
-              endwhere
-
-              else
-
-              where (ocean)
-                  w10(:,:) = 2.458 + u_star(:,:)*(20.255-0.56*u_star(:,:))  ! Eq(7) Moon et al.
-                  where ( w10(:,:) > 12.5 )
-                      rough_mom(:,:) = 0.001*(0.085*w10(:,:) - 0.58)    ! Eq(8b) Moon et al.
-                  elsewhere     
-                      rough_mom(:,:) = 0.0185/grav*u_star(:,:)**2  ! (8a) Moon et al.
-                  endwhere
-                  rough_heat (:,:) = zcoh1 * xx2(:,:) + zcoh2 * xx1(:,:)
-                  rough_moist(:,:) = zcoq1 * xx2(:,:) + zcoq2 * xx1(:,:)
-!             --- lower limit on roughness? ---
-                  rough_mom  (:,:) = max( rough_mom  (:,:), roughness_min )
-                  rough_heat (:,:) = max( rough_heat (:,:), roughness_min )
-                  rough_moist(:,:) = max( rough_moist(:,:), roughness_min )
-              endwhere
-
-              endif
-! SJL ----------------------------------------------------------------------------------------
-
+                           if(do_cap40) rough_mom(i,j) = min( rough_mom(i,j), 2.82E-3)
+                      else
+                           rough_mom(i,j) = 0.0185/grav*u_star(i,j)**2  ! (8a) Moon et al.
+                      endif
+                           zt1 = min( 1., max(0., (w10(i,j)-v10n)/(v10m-v10n)) )
+                           rough_moist(i,j) = zcoq1*zt1*xx2(i,j) + zcoq2 * xx1(i,j)
+                           rough_heat (i,j) = zcoh1*zt1*xx2(i,j) + zcoh2 * xx1(i,j)
+!                 --- lower limit on roughness? ---
+                      rough_mom  (i,j) = max( rough_mom  (i,j), roughness_min )
+                      rough_heat (i,j) = max( rough_heat (i,j), roughness_min )
+                      rough_moist(i,j) = max( rough_moist(i,j), roughness_min )
+                    endif
+                 enddo
+              enddo
+! SJL -----------------------------------------------------------------------------------
           else
+!     --- Beljaars scheme ---
           where (ocean)
               rough_mom  (:,:) = zcom1 * xx2(:,:) + zcom2 * xx1(:,:)
               rough_heat (:,:) = zcoh1 * xx2(:,:) + zcoh2 * xx1(:,:)
