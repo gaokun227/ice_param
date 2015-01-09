@@ -29,8 +29,8 @@ public  ice_albedo, ice_albedo_init
 
 !--------------------- version number ----------------------------------
 
-character(len=128) :: version = '$Id: ice_albedo.F90,v 19.0 2012/01/06 20:36:39 fms Exp $'
-character(len=128) :: tagname = '$Name: testing $'
+character(len=128) :: version = '$Id$'
+character(len=128) :: tagname = '$Name$'
 
 !=======================================================================
 

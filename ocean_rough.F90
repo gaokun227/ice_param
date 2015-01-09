@@ -20,8 +20,8 @@ private
 public :: compute_ocean_roughness, fixed_ocean_roughness
 
 !-----------------------------------------------------------------------
-character(len=256) :: version = '$Id: ocean_rough.F90,v 19.0.10.1 2014/05/16 18:45:48 Lucas.Harris Exp $'
-character(len=256) :: tagname = '$Name: testing $'
+character(len=256) :: version = '$Id$'
+character(len=256) :: tagname = '$Name$'
 !-----------------------------------------------------------------------
 !----- namelist -----
 
