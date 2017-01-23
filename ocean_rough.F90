@@ -9,7 +9,7 @@ use          mpp_mod, only: input_nml_file
 use          fms_mod, only: open_namelist_file
 #endif
 
-use       fms_mod, only: error_mesg, FATAL, file_exist,  &
+use       fms_mod, only: error_mesg, FATAL, file_exist,  mpp_error, &
                          check_nml_error, mpp_pe, mpp_root_pe, close_file, &
                          write_version_number, stdlog
 use constants_mod, only: grav, vonkarm
@@ -214,6 +214,9 @@ contains
           rough_moist = 0.0
       endwhere
 
+   else
+      call mpp_error(FATAL, '==>Error from ocean_rough_mod(compute_ocean_roughness): '//&
+            'Unknown roughness scheme (case sensitive): ' //trim(rough_scheme))
    endif
 
 !-----------------------------------------------------------------------
