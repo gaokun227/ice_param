@@ -392,7 +392,7 @@ if (ocean_albedo_option == 5) then
     albedo_vis_dir = 0.026/(coszen**1.7+0.065)                  &
                     +0.15*(coszen-0.10)*(coszen-0.5)*(coszen-1.0)
   elsewhere
-    albedo_vis_dir = 0.4075 ! coszen=0 value of above expression
+    albedo_vis_dir = 0.3925 ! coszen=0 value of above expression
   endwhere
   albedo_vis_dif = 0.06
   albedo_nir_dir = albedo_vis_dir
