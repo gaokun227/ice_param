@@ -27,15 +27,10 @@ module ice_albedo_mod
 !
 !=======================================================================
 
-#ifdef INTERNAL_FILE_NML
 use          mpp_mod, only: input_nml_file
-#else
-use          fms_mod, only: open_namelist_file
-#endif
 
-use            fms_mod, only:  error_mesg, file_exist,  &
-                               check_nml_error,  &
-                               FATAL, close_file, mpp_pe, mpp_root_pe, &
+use            fms_mod, only:  error_mesg, check_nml_error,  &
+                               FATAL, mpp_pe, mpp_root_pe, &
                                write_version_number, stdlog
 
 implicit none
@@ -91,19 +86,8 @@ temp_ice_freeze = t_freeze
 
 !------------------- read namelist input -------------------------------
 
-#ifdef INTERNAL_FILE_NML
       read (input_nml_file, nml=ice_albedo_nml, iostat=io)
       ierr = check_nml_error(io, 'ice_albedo_nml')
-#else
-      if (file_exist('input.nml')) then
-         unit = open_namelist_file ('input.nml')
-         ierr=1; do while (ierr /= 0)
-            read  (unit, nml=ice_albedo_nml, iostat=io, end=10)
-            ierr = check_nml_error(io,'ice_albedo_nml')
-         enddo
-  10     call close_file (unit)
-      endif
-#endif
 
 !------- write version number and namelist ---------
 
