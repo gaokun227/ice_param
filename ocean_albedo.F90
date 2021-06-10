@@ -414,11 +414,9 @@ where (.not.ocean)
 end where
 
 if (ocean_albedo_option == 6) then
-   
-   if(present(flux_u) .and. present(flux_v)) then
-   
+  if(present(flux_u) .and. present(flux_v)) then
 !
-!  Add white cap coverage as a function of wind speed WC = 0.0397*U10^1.59 converted from % to ratio from:
+!   Add white cap coverage as a function of wind speed WC = 0.0397*U10^1.59 converted from % to ratio from:
 !   Salisbury, D. J., Anguelova, M. D., and Brooks, I. M.:
 !   Global Distribution and Seasonal Dependence of Satellite-based Whitecap Fraction,
 !   Geophys. Res. Lett., 41, 1616–1623, https://doi.org/10.1002/2014GL059246, 2014. 
@@ -438,29 +436,23 @@ if (ocean_albedo_option == 6) then
        u10 = sqrt(ua*ua + va*va)
    endwhere
 
-  where (coszen .ge. 0.0)
-    albedo_vis_dir = 0.026/(coszen**1.7+0.065)                  &
+   where (coszen .ge. 0.0)
+     albedo_vis_dir = 0.026/(coszen**1.7+0.065)                  &
                     +0.15*(coszen-0.10)*(coszen-0.5)*(coszen-1.0)
-  elsewhere
-    albedo_vis_dir = 0.4075 ! coszen=0 value of above expression
-  endwhere
-  white_cap_coverage=0.000397*u10**1.59
-  albedo_vis_dif = 0.06*(1-white_cap_coverage)+0.5*white_cap_coverage
-  albedo_nir_dif = 0.06
-  albedo_nir_dir = albedo_vis_dir
-  albedo_vis_dir = albedo_nir_dir*(1-white_cap_coverage)+max(albedo_nir_dir,0.5)*white_cap_coverage
-endif
-
-else
-  where (coszen .ge. 0.0)
-    albedo_vis_dir = 0.026/(coszen**1.7+0.065)                  &
-                    +0.15*(coszen-0.10)*(coszen-0.5)*(coszen-1.0)
-  elsewhere
-    albedo_vis_dir = 0.4075 ! coszen=0 value of above expression
-  endwhere
-  albedo_vis_dif = 0.06
-  albedo_nir_dif = 0.06
-  albedo_vis_dir = albedo_nir_dir
+   elsewhere
+     !Will Cooke bug fix: albedo_vis_dir = 0.026/0.064 + 0.15*(-0.1)(-0.5)(-1)
+     !                                   = 0.4 + 0.15*(-0.05) = 0.4 - 0.0075 = 0.3925
+     albedo_vis_dir = 0.3925 ! coszen=0 value of above expression
+   endwhere
+   white_cap_coverage=0.000397*u10**1.59
+   albedo_vis_dif = 0.06*(1-white_cap_coverage)+0.5*white_cap_coverage
+   albedo_nir_dif = 0.06
+   albedo_nir_dir = albedo_vis_dir
+   albedo_vis_dir = albedo_nir_dir*(1-white_cap_coverage)+max(albedo_nir_dir,0.5)*white_cap_coverage
+  else
+   call error_mesg ('compute_ocean_albedo_new: ',&
+                    'ocean_albedo_option=6 but flux_u,flux_v are not present in arguments.', FATAL)
+  endif
 endif
 
 where (.not.ocean)
