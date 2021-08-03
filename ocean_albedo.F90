@@ -68,6 +68,11 @@ namelist /ocean_albedo_nml/  ocean_albedo_option, &
 ! ocean_albedo_option = 5 : separate treatment of dif/dir shortwave using
 !                           NCAR CCMS3.0 scheme (Briegleb et al, 1986,
 !                           J. Clim. and Appl. Met., v. 27, 214-226)
+!
+! ocean_albedo_option = 6 : separate treatment of dif/dir shortwave using
+!                           NCAR CCMS3.0 scheme (Briegleb et al, 1986,
+!                           J. Clim. and Appl. Met., v. 27, 214-226)
+!                           with reflection from White Caps
 
   interface compute_ocean_albedo
      module procedure compute_ocean_albedo_old ! obsolete - remove later
@@ -267,7 +272,7 @@ where (.not.ocean) albedo = 0.0
 
 !#######################################################################
    subroutine compute_ocean_albedo_new (ocean, coszen, albedo_vis_dir, &
-                albedo_vis_dif, albedo_nir_dir, albedo_nir_dif, lat)
+                albedo_vis_dif, albedo_nir_dir, albedo_nir_dif, lat, flux_u, flux_v )
 
 !-----------------------------------------------------------------------
 ! input
@@ -285,10 +290,12 @@ where (.not.ocean) albedo = 0.0
       real,    intent(out) :: albedo_nir_dir(:,:)
       real,    intent(out) :: albedo_nir_dif(:,:)
       real,    intent(in), optional :: lat(:,:)
+      real,    intent(in), optional :: flux_u(:,:) !input as stress and converted to u velocity
+      real,    intent(in), optional :: flux_v(:,:) !input as stress and converted to v velocity
 !-----------------------------------------------------------------------
 
    real, dimension(size(ocean,1),size(ocean,2)) :: trans, zen,  &
-                                                   dz, dt, dzdt
+                                                   dz, dt, dzdt, ua, va, u10, white_cap_coverage
 integer, dimension(size(ocean,1),size(ocean,2)) :: i1, j1
 
    real, dimension(size(ocean,1),size(ocean,2)) :: cos14
@@ -400,6 +407,55 @@ where (.not.ocean)
   albedo_nir_dir = 0.0
   albedo_nir_dif = 0.0
 end where
+
+if (ocean_albedo_option == 6) then
+  if(present(flux_u) .and. present(flux_v)) then
+!
+!   Add white cap coverage as a function of wind speed WC = 0.0397*U10^1.59 converted from % to ratio from:
+!   Salisbury, D. J., Anguelova, M. D., and Brooks, I. M.:
+!   Global Distribution and Seasonal Dependence of Satellite-based Whitecap Fraction,
+!   Geophys. Res. Lett., 41, 1616–1623, https://doi.org/10.1002/2014GL059246, 2014. 
+!
+!   and visible albedo of White Caps = 0.5 from:
+!   Stabeno, P. J., & Monahan, E. C. (1986). The influence of whitecaps on the albedo
+!   of the sea surface. In Oceanic Whitecaps (pp. 261-266). Springer, Dordrecht.
+!
+   where(ocean)
+       ua=flux_u ! Note rough conversion from stress to speed
+       va=flux_v ! Note rough conversion from stress to speed
+   endwhere
+
+   call invert_tau_for_du(ua, va) ! Note rough conversion from stress to speed
+
+   where(ocean)
+       u10 = sqrt(ua*ua + va*va)
+   endwhere
+
+   where (coszen .ge. 0.0)
+     albedo_vis_dir = 0.026/(coszen**1.7+0.065)                  &
+                    +0.15*(coszen-0.10)*(coszen-0.5)*(coszen-1.0)
+   elsewhere
+     !Will Cooke bug fix: albedo_vis_dir = 0.026/0.064 + 0.15*(-0.1)(-0.5)(-1)
+     !                                   = 0.4 + 0.15*(-0.05) = 0.4 - 0.0075 = 0.3925
+     albedo_vis_dir = 0.3925 ! coszen=0 value of above expression
+   endwhere
+   white_cap_coverage=0.000397*u10**1.59
+   albedo_vis_dif = 0.06*(1-white_cap_coverage)+0.5*white_cap_coverage
+   albedo_nir_dif = 0.06
+   albedo_nir_dir = albedo_vis_dir
+   albedo_vis_dir = albedo_nir_dir*(1-white_cap_coverage)+max(albedo_nir_dir,0.5)*white_cap_coverage
+  else
+   call error_mesg ('compute_ocean_albedo_new: ',&
+                    'ocean_albedo_option=6 but flux_u,flux_v are not present in arguments.', FATAL)
+  endif
+endif
+
+where (.not.ocean)
+  albedo_vis_dir = 0.0
+  albedo_vis_dif = 0.0
+  albedo_nir_dir = 0.0
+  albedo_nir_dif = 0.0
+end where
    
 !-----------------------------------------------------------------------
 
@@ -430,9 +486,9 @@ end where
            write (unit, nml=ocean_albedo_nml)
       endif
 
-   if (ocean_albedo_option < 1 .or. ocean_albedo_option > 5)   &
+   if (ocean_albedo_option < 1 .or. ocean_albedo_option > 6)   &
        call error_mesg ('ocean_albedo',                        &
-                        'ocean_albedo_option must = 1,2,3,4 or 5', FATAL)
+                        'ocean_albedo_option must = 1,2,3,4,5 or 6', FATAL)
 
    if(ocean_albedo_option == 2) then
      if ( present(ocean) .and. present(lat) ) then
@@ -459,6 +515,34 @@ end where
    first   = .false.
 
    end subroutine ocean_albedo_init
+
+   
+! ##############################################################################
+
+subroutine invert_tau_for_du(u,v)
+! Arguments
+real, dimension(:,:),intent(inout) :: u, v
+! Local variables
+integer :: i, j
+real :: cd, cddvmod, tau2
+
+  cd=0.0015
+
+  do j=lbound(u,2), ubound(u,2)
+    do i=lbound(u,1), ubound(u,1)
+      tau2=u(i,j)*u(i,j)+v(i,j)*v(i,j)
+      cddvmod=sqrt(cd*sqrt(tau2))
+      if (cddvmod.ne.0.) then
+        u(i,j)=u(i,j)/cddvmod
+        v(i,j)=v(i,j)/cddvmod
+      else
+        u(i,j)=0.
+        v(i,j)=0.
+      endif
+    enddo
+  enddo
+
+end subroutine invert_tau_for_du
 
 !#######################################################################
 
