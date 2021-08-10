@@ -72,7 +72,8 @@ namelist /ocean_albedo_nml/  ocean_albedo_option, &
 ! ocean_albedo_option = 6 : separate treatment of dif/dir shortwave using
 !                           NCAR CCMS3.0 scheme (Briegleb et al, 1986,
 !                           J. Clim. and Appl. Met., v. 27, 214-226)
-!                           with reflection from White Caps
+!                           with reflection from White Caps from Koepke (1984)
+!                           and Brumer et al. (2017)
 
   interface compute_ocean_albedo
      module procedure compute_ocean_albedo_old ! obsolete - remove later
@@ -394,31 +395,28 @@ if (ocean_albedo_option == 5) then
     albedo_vis_dir = 0.026/(coszen**1.7+0.065)                  &
                     +0.15*(coszen-0.10)*(coszen-0.5)*(coszen-1.0)
   elsewhere
-    albedo_vis_dir = 0.3925 ! coszen=0 value of above expression
+     !albedo_vis_dir = 0.4075 ! coszen=0 value of above expression
+     !Will Cooke bug fix: albedo_vis_dir = 0.026/0.064 + 0.15*(-0.1)(-0.5)(-1)
+     !                                   = 0.4 + 0.15*(-0.05) = 0.4 - 0.0075 = 0.3925
+     albedo_vis_dir = 0.3925 ! coszen=0 value of above expression
   endwhere
   albedo_vis_dif = 0.06
   albedo_nir_dir = albedo_vis_dir
   albedo_nir_dif = 0.06
 endif
 
-where (.not.ocean)
-  albedo_vis_dir = 0.0
-  albedo_vis_dif = 0.0
-  albedo_nir_dir = 0.0
-  albedo_nir_dif = 0.0
-end where
-
 if (ocean_albedo_option == 6) then
   if(present(flux_u) .and. present(flux_v)) then
 !
-!   Add white cap coverage as a function of wind speed WC = 0.0397*U10^1.59 converted from % to ratio from:
-!   Salisbury, D. J., Anguelova, M. D., and Brooks, I. M.:
-!   Global Distribution and Seasonal Dependence of Satellite-based Whitecap Fraction,
-!   Geophys. Res. Lett., 41, 1616–1623, https://doi.org/10.1002/2014GL059246, 2014. 
+!  Add white cap coverage as a function of wind speed WC = 0.0738/100*(U10-4.23)^1.42 converted from % to ratio from:
+!   Brumer, Sophia E., et al. "Whitecap coverage dependence on wind and wave statistics as observed during
+!   SO GasEx and HiWinGS." Journal of Physical Oceanography 47.9 (2017): 2211-2235.
 !
-!   and visible albedo of White Caps = 0.5 from:
-!   Stabeno, P. J., & Monahan, E. C. (1986). The influence of whitecaps on the albedo
-!   of the sea surface. In Oceanic Whitecaps (pp. 261-266). Springer, Dordrecht.
+!   and canonical albedo of White Caps = 0.22 from:
+!     Koepke, Peter. "Effective reflectance of oceanic whitecaps." Applied optics 23.11 (1984): 1816-1824.
+!     supported by satellite applications https://oceancolor.gsfc.nasa.gov/reprocessing/r2009/whitecap/
+!     and recent work Randolph, Kaylan, et al. "Novel methods for optically measuring whitecaps under natural wave-breaking
+!     conditions in the Southern Ocean." Journal of Atmospheric and Oceanic Technology 34.3 (2017): 533-554.
 !
    where(ocean)
        ua=flux_u ! Note rough conversion from stress to speed
@@ -435,15 +433,16 @@ if (ocean_albedo_option == 6) then
      albedo_vis_dir = 0.026/(coszen**1.7+0.065)                  &
                     +0.15*(coszen-0.10)*(coszen-0.5)*(coszen-1.0)
    elsewhere
+     !albedo_vis_dir = 0.4075 ! coszen=0 value of above expression
      !Will Cooke bug fix: albedo_vis_dir = 0.026/0.064 + 0.15*(-0.1)(-0.5)(-1)
      !                                   = 0.4 + 0.15*(-0.05) = 0.4 - 0.0075 = 0.3925
      albedo_vis_dir = 0.3925 ! coszen=0 value of above expression
    endwhere
-   white_cap_coverage=0.000397*u10**1.59
-   albedo_vis_dif = 0.06*(1-white_cap_coverage)+0.5*white_cap_coverage
-   albedo_nir_dif = 0.06
+   white_cap_coverage=0.000738*max(0.0,u10-4.23)**1.42
+   albedo_vis_dir = albedo_vis_dir*(1.0-white_cap_coverage)+max(albedo_vis_dir,0.22)*white_cap_coverage
+   albedo_vis_dif = 0.06*(1.0-white_cap_coverage)+0.22*white_cap_coverage
    albedo_nir_dir = albedo_vis_dir
-   albedo_vis_dir = albedo_nir_dir*(1-white_cap_coverage)+max(albedo_nir_dir,0.5)*white_cap_coverage
+   albedo_nir_dif = albedo_vis_dif
   else
    call error_mesg ('compute_ocean_albedo_new: ',&
                     'ocean_albedo_option=6 but flux_u,flux_v are not present in arguments.', FATAL)
