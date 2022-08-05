@@ -418,6 +418,7 @@ if (ocean_albedo_option == 6) then
 !     and recent work Randolph, Kaylan, et al. "Novel methods for optically measuring whitecaps under natural wave-breaking
 !     conditions in the Southern Ocean." Journal of Atmospheric and Oceanic Technology 34.3 (2017): 533-554.
 !
+   ua=0.0;va=0.0;u10=0.0 !Initialize to avoid overflow
    where(ocean)
        ua=flux_u ! Note rough conversion from stress to speed
        va=flux_v ! Note rough conversion from stress to speed
