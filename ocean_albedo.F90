@@ -302,7 +302,7 @@ integer, dimension(size(ocean,1),size(ocean,2)) :: i1, j1
    real, dimension(size(ocean,1),size(ocean,2)) :: cos14
 
       integer :: i, j
-
+   real, parameter :: tiny=1.0e-30
 !-----------------------------------------------------------------------
 !------------ calculate surface albedo over open water -----------------
 !-----------------------------------------------------------------------
@@ -438,7 +438,11 @@ if (ocean_albedo_option == 6) then
      !                                   = 0.4 + 0.15*(-0.05) = 0.4 - 0.0075 = 0.3925
      albedo_vis_dir = 0.3925 ! coszen=0 value of above expression
    endwhere
-   white_cap_coverage=0.000738*max(0.0,u10-4.23)**1.42
+   where(ocean)
+     white_cap_coverage=0.000738*max(tiny,u10-4.23)**1.42
+   elsewhere
+     white_cap_coverage=0.0
+   endwhere
    albedo_vis_dir = albedo_vis_dir*(1.0-white_cap_coverage)+max(albedo_vis_dir,0.22)*white_cap_coverage
    albedo_vis_dif = 0.06*(1.0-white_cap_coverage)+0.22*white_cap_coverage
    albedo_nir_dir = albedo_vis_dir
