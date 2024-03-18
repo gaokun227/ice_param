@@ -422,6 +422,8 @@ if (ocean_albedo_option == 6) then
    where(ocean)
        ua=flux_u ! Note rough conversion from stress to speed
        va=flux_v ! Note rough conversion from stress to speed
+   elsewhere
+       ua=0.0; va=0.0 !To ensure working in debug mode
    endwhere
 
    call invert_tau_for_du(ua, va) ! Note rough conversion from stress to speed
