@@ -104,7 +104,7 @@ contains
 !-----------------------------------------------------------------------
 
    real, dimension(size(ocean,1),size(ocean,2)) :: ustar2, xx1, xx2, w10 !miz
-   real, dimension(size(ocean,1),size(ocean,2)) :: ustar, xx3, u10n, z0, z1, alpha_v, reynolds_rough
+   real, dimension(size(ocean,1),size(ocean,2)) :: ustar, xx3, u10n, z0, zt, z1, alpha_v, reynolds_rough
    real:: zt1
    integer :: i, j, n, iter
    real :: ustar_min, m, b, u_max, rough_mom_init
@@ -228,6 +228,50 @@ contains
           rough_moist = 0.0
       endwhere
 
+      ! KGao - introduce z0/zt options as in HWRF 2017 
+      ! this may cross over heavily with Baoqiang's work
+   else if (trim(rough_scheme) == 'hwrf17') then
+
+      rough_mom_init = 1.e-03 
+      ustar_min = 1.e-05 ! added by IH just in case ustar is unphysically small
+      ustar(:,:) = u_star(:,:)
+      where (ocean)
+          ustar(:,:)  = max(ustar(:,:), ustar_min)  ! IH
+          ustar2(:,:) = ustar(:,:)*ustar(:,:)
+          xx1(:,:)    = gnu/ustar(:,:)
+          xx2(:,:)    = ustar2(:,:)/grav
+          xx3(:,:)    = ustar(:,:)/vonkarm
+      endwhere
+
+      ! KGao:
+      ! the whole point of ocean_rough() is to get z0/zt just based on ustar
+      ! the first guess of z0 and the choice of iter work fine through offline test
+      z0(:,:) = rough_mom_init
+      iter = 5
+
+      do j = 1, size(ocean, 2)
+        do i = 1, size(ocean, 1)
+           if ( ocean(i,j) ) then
+              do n = 1, iter
+                 u10n(i,j) = xx3(i,j) * log(10 / z0(i,j))
+                 call cal_z0_hwrf17(u10n(i,j), z0(i,j))
+              enddo
+              call cal_zt_hwrf17(u10n(i,j), zt(i,j))
+           endif
+        enddo
+      enddo
+
+      where (ocean)
+          rough_mom  (:,:) = z0(:,:)
+          rough_mom  (:,:) = max( rough_mom  (:,:), roughness_min )
+          rough_heat (:,:) = min(1.1e-04, zt(:,:))
+          rough_moist(:,:) = rough_heat (:,:)
+      elsewhere
+          rough_mom   = 0.0
+          rough_heat  = 0.0
+          rough_moist = 0.0
+      endwhere
+
    else
       call mpp_error(FATAL, '==>Error from ocean_rough_mod(compute_ocean_roughness): '//&
             'Unknown roughness scheme (case sensitive): ' //trim(rough_scheme))
@@ -288,6 +332,87 @@ contains
  end subroutine ocean_rough_init
 
 !#######################################################################
+
+ subroutine cal_z0_hwrf17(ws10m, z0)
+      ! coded by Kun Gao (Kun.Gao@noaa.gov)
+      real, intent (in) :: ws10m
+      real, intent (out):: z0
+      real, parameter ::          &
+      p13=-1.296521881682694e-02, &
+      p12= 2.855780863283819e-01, &
+      p11=-1.597898515251717e+00, &
+      p10=-8.396975715683501e+00, &
+      p25= 3.790846746036765e-10, &
+      p24= 3.281964357650687e-09, &
+      p23= 1.962282433562894e-07, &
+      p22=-1.240239171056262e-06, &
+      p21=1.739759082358234e-07,  &
+      p20=2.147264020369413e-05,  &
+      p35=1.840430200185075e-07,  &
+      p34=-2.793849676757154e-05, &
+      p33=1.735308193700643e-03,  &
+      p32=-6.139315534216305e-02, &
+      p31=1.255457892775006e+00,  &
+      p30=-1.663993561652530e+01, &
+      p40=4.579369142033410e-04
+
+      if (ws10m <= 6.5) then
+         z0 = exp( p10 + p11*ws10m + p12*ws10m**2 + p13*ws10m**3)
+      elseif (ws10m > 6.5 .and. ws10m <= 15.7) then
+         z0 = p25*ws10m**5 + p24*ws10m**4 + p23*ws10m**3&
+            + p22*ws10m**2 + p21*ws10m + p20
+      elseif (ws10m > 15.7 .and. ws10m <= 53.) then
+         z0 = exp( p35*ws10m**5 + p34*ws10m**4 + p33*ws10m**3&
+            + p32*ws10m**2 + p31*ws10m + p30 )
+      else
+         z0 = p40
+      endif
+ end subroutine cal_z0_hwrf17
+
+ subroutine cal_zt_hwrf17(ws10m, zt)
+      ! coded by Kun Gao (Kun.Gao@noaa.gov)
+      real, intent (in) :: ws10m
+      real, intent (out):: zt
+      real, parameter  :: p00 =  1.100000000000000e-04, &
+           p15 = -9.144581627678278e-10, p14 =  7.020346616456421e-08,&
+           p13 = -2.155602086883837e-06, p12 =  3.333848806567684e-05,&
+           p11 = -2.628501274963990e-04, p10 =  8.634221567969181e-04,&
+           p25 = -8.654513012535990e-12, p24 =  1.232380050058077e-09,&
+           p23 = -6.837922749505057e-08, p22 =  1.871407733439947e-06,&
+           p21 = -2.552246987137160e-05, p20 =  1.428968311457630e-04,&
+           p35 =  3.207515102100162e-12, p34 = -2.945761895342535e-10,&
+           p33 =  8.788972147364181e-09, p32 = -3.814457439412957e-08,&
+           p31 = -2.448983648874671e-06, p30 =  3.436721779020359e-05,&
+           p45 = -3.530687797132211e-11, p44 =  3.939867958963747e-09,&
+           p43 = -1.227668406985956e-08, p42 = -1.367469811838390e-05,&
+           p41 =  5.988240863928883e-04, p40 = -7.746288511324971e-03,&
+           p56 = -1.187982453329086e-13, p55 =  4.801984186231693e-11,&
+           p54 = -8.049200462388188e-09, p53 =  7.169872601310186e-07,&
+           p52 = -3.581694433758150e-05, p51 =  9.503919224192534e-04,&
+           p50 = -1.036679430885215e-02,&
+           p60 =  4.751256171799112e-05
+
+      if (ws10m >= 0.0 .and. ws10m < 5.9 ) then
+         zt = p00
+      elseif (ws10m >= 5.9 .and. ws10m <= 15.4) then
+         zt = p10 + ws10m * (p11 + ws10m * (p12 + ws10m * (p13&
+                  + ws10m * (p14 + ws10m * p15))))
+      elseif (ws10m > 15.4 .and. ws10m <= 21.6) then
+         zt = p20 + ws10m * (p21 + ws10m * (p22 + ws10m * (p23&
+                  + ws10m * (p24 + ws10m * p25))))
+      elseif (ws10m > 21.6 .and. ws10m <= 42.2) then
+         zt = p30 + ws10m * (p31 + ws10m * (p32 + ws10m * (p33&
+                  + ws10m * (p34 + ws10m * p35))))
+      elseif ( ws10m > 42.2 .and. ws10m <= 53.3) then
+         zt = p40 + ws10m * (p41 + ws10m * (p42 + ws10m * (p43&
+                  + ws10m * (p44 + ws10m * p45))))
+      elseif ( ws10m > 53.3 .and. ws10m <= 80.0) then
+         zt = p50 + ws10m * (p51 + ws10m * (p52 + ws10m * (p53&
+                  + ws10m * (p54 + ws10m * (p55 + ws10m * p56)))))
+      elseif ( ws10m > 80.0) then
+         zt = p60
+      endif
+ end subroutine cal_zt_hwrf17
 
 end module ocean_rough_mod
 
