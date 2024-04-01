@@ -228,35 +228,42 @@ contains
           rough_moist = 0.0
       endwhere
 
-      ! KGao - introduce z0/zt options as in HWRF 2017 
-      ! this may cross over heavily with Baoqiang's work
-   else if (trim(rough_scheme) == 'hwrf17') then
+   ! KGao - introduce z0/zt options as in HWRF 2015 and 2017 versions
+   ! this may cross over Baoqiang's work
+   ! the whole point is to obtain u10n, z0, zt based on ustar via iterations
+   else if (trim(rough_scheme) == 'hwrf15' .or. trim(rough_scheme) == 'hwrf17') then
 
-      rough_mom_init = 1.e-03 
-      ustar_min = 1.e-05 ! added by IH just in case ustar is unphysically small
+      rough_mom_init = 1.e-03
+      ustar_min = 1.e-05
       ustar(:,:) = u_star(:,:)
       where (ocean)
-          ustar(:,:)  = max(ustar(:,:), ustar_min)  ! IH
+          ustar(:,:)  = max(ustar(:,:), ustar_min)
           ustar2(:,:) = ustar(:,:)*ustar(:,:)
           xx1(:,:)    = gnu/ustar(:,:)
           xx2(:,:)    = ustar2(:,:)/grav
           xx3(:,:)    = ustar(:,:)/vonkarm
       endwhere
 
-      ! KGao:
-      ! the whole point of ocean_rough() is to get z0/zt just based on ustar
-      ! the first guess of z0 and the choice of iter work fine through offline test
       z0(:,:) = rough_mom_init
       iter = 5
 
       do j = 1, size(ocean, 2)
         do i = 1, size(ocean, 1)
            if ( ocean(i,j) ) then
+              !z0(i,j) = 0.005 * xx2(i,j) ! KGao test - use charnock coeff to get initial guess for z0
               do n = 1, iter
                  u10n(i,j) = xx3(i,j) * log(10 / z0(i,j))
-                 call cal_z0_hwrf17(u10n(i,j), z0(i,j))
+                 if (trim(rough_scheme) == 'hwrf15') then
+                   call cal_z0_hwrf15(u10n(i,j), z0(i,j))
+                 else if (trim(rough_scheme) == 'hwrf17') then
+                   call cal_z0_hwrf17(u10n(i,j), z0(i,j))
+                 endif
               enddo
-              call cal_zt_hwrf17(u10n(i,j), zt(i,j))
+              if (trim(rough_scheme) == 'hwrf15') then
+                 call cal_zt_hwrf15(u10n(i,j), zt(i,j))
+              else if (trim(rough_scheme) == 'hwrf17') then
+                 call cal_zt_hwrf17(u10n(i,j), zt(i,j))
+              endif
            endif
         enddo
       enddo
@@ -332,6 +339,83 @@ contains
  end subroutine ocean_rough_init
 
 !#######################################################################
+      
+ subroutine cal_z0_hwrf15(ws10m, z0)
+      ! coded by Kun Gao (Kun.Gao@noaa.gov)
+      ! originally developed by URI/GFDL
+      real, intent (in) :: ws10m
+      real, intent (out):: z0
+      real, parameter ::         &
+      a0=-8.367276172397277e-12, &          
+      a1=1.7398510865876079e-09, &
+      a2=-1.331896578363359e-07, &
+      a3=4.507055294438727e-06,  &
+      a4=-6.508676881906914e-05, &
+      a5=0.00044745137674732834, &
+      a6=-0.0010745704660847233, &
+      b0=2.1151080765239772e-13, &
+      b1=-3.2260663894433345e-11,&
+      b2=-3.329705958751961e-10, &
+      b3=1.7648562021709124e-07, &
+      b4=7.107636825694182e-06,  &
+      b5=-0.0013914681964973246, &
+      b6=0.0406766967657759
+               
+      if (ws10m <= 5.0) then
+         z0 = 0.0185/9.8*(7.59e-4*ws10m**2+2.46e-2*ws10m)**2
+      elseif (ws10m > 5.0 .and. ws10m <= 10.) then
+         z0 = 0.00000235*(ws10m**2-25.)+3.805129199617346e-05
+      elseif (ws10m > 10.0 .and. ws10m <= 60.) then
+         z0 = a6 + a5*ws10m + a4*ws10m**2 + a3*ws10m**3&
+            + a2*ws10m**4 + a1*ws10m**5 + a0*ws10m**6
+      else
+         z0 = b6 + b5*ws10m + b4*ws10m**2 + b3*ws10m**3&
+            + b2*ws10m**4 + b1*ws10m**5 + b0*ws10m**6
+      endif
+
+ end subroutine cal_z0_hwrf15
+
+ subroutine cal_zt_hwrf15(ws10m, zt)
+      ! coded by Kun Gao (Kun.Gao@noaa.gov)
+      ! originally developed by URI/GFDL
+      real, intent (in) :: ws10m
+      real, intent (out):: zt
+      real, parameter ::      &
+      a0 = 2.51715926619e-09, &
+      a1 = -1.66917514012e-07,&
+      a2 = 4.57345863551e-06, &
+      a3 = -6.64883696932e-05,&
+      a4 = 0.00054390175125,  &
+      a5 = -0.00239645231325, &
+      a6 = 0.00453024927761,  &
+      b0 = -1.72935914649e-14,&
+      b1 = 2.50587455802e-12, &
+      b2 = -7.90109676541e-11,&
+      b3 = -4.40976353607e-09,&
+      b4 = 3.68968179733e-07, &
+      b5 = -9.43728336756e-06,&
+      b6 = 8.90731312383e-05, &
+      c0 = 4.68042680888e-14, &
+      c1 = -1.98125754931e-11,&
+      c2 = 3.41357133496e-09, &
+      c3 = -3.05130605309e-07,&
+      c4 = 1.48243563819e-05, &
+      c5 = -0.000367207751936,&
+      c6 = 0.00357204479347
+
+      if (ws10m <= 7.0) then
+         zt = 0.0185/9.8*(7.59e-4*ws10m**2+2.46e-2*ws10m)**2
+      elseif (ws10m > 7.0 .and. ws10m <= 15.) then
+         zt = a6 + a5*ws10m + a4*ws10m**2 + a3*ws10m**3&
+            + a2*ws10m**4 + a1*ws10m**5 + a0*ws10m**6
+      elseif (ws10m > 15.0 .and. ws10m <= 60.) then
+         zt = b6 + b5*ws10m + b4*ws10m**2 + b3*ws10m**3&
+            + b2*ws10m**4 + b1*ws10m**5 + b0*ws10m**6
+      else
+         zt = c6 + c5*ws10m + c4*ws10m**2 + c3*ws10m**3&
+            + c2*ws10m**4 + c1*ws10m**5 + c0*ws10m**6
+      endif
+ end subroutine cal_zt_hwrf15
 
  subroutine cal_z0_hwrf17(ws10m, z0)
       ! coded by Kun Gao (Kun.Gao@noaa.gov)
@@ -367,6 +451,8 @@ contains
       else
          z0 = p40
       endif
+      !if (ws10m > 30.) z0 = max(z0,0.003)
+
  end subroutine cal_z0_hwrf17
 
  subroutine cal_zt_hwrf17(ws10m, zt)
