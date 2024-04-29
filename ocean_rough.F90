@@ -32,6 +32,7 @@ implicit none
 private
 
 public :: compute_ocean_roughness, fixed_ocean_roughness
+public :: cal_z0_hwrf17, cal_zt_hwrf17, cal_z0_hwrf15, cal_zt_hwrf15
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id$'
