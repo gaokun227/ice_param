@@ -32,7 +32,7 @@ implicit none
 private
 
 public :: compute_ocean_roughness, fixed_ocean_roughness, &
-          cal_z0_hwrf17, cal_zt_hwrf17
+          cal_z0_hwrf17, cal_zt_hwrf17, read_ocean_rough_scheme
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id$'
@@ -329,6 +329,22 @@ contains
 
 !#######################################################################
 
+ subroutine read_ocean_rough_scheme (ocean_rough_scheme)
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
+! to read in the ocean roughness scheme used
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
+
+  character(len=32), intent(inout) :: ocean_rough_scheme
+  integer :: ierr, io
+
+  read (input_nml_file, nml=ocean_rough_nml, iostat=io)
+  ierr = check_nml_error(io, 'ocean_rough_nml')
+  ocean_rough_scheme = rough_scheme
+
+ end subroutine read_ocean_rough_scheme
+
+!#######################################################################
+
  subroutine cal_z0_hwrf17 (uref,z0)
 
 ! This subroutine is orginally from HWRF model (2017 version, znot_m_v6)
@@ -381,9 +397,6 @@ contains
     else
       print*, 'Wrong input uref value:',uref
     endif
-!
-    z0 = max(z0, roughness_min)
-!
 !
  end subroutine cal_z0_hwrf17
 
@@ -472,8 +485,6 @@ contains
       print*, 'Wrong input uref value:',uref
     endif
 !
-    zt = min(1.1e-04, zt)
-
   end subroutine cal_zt_hwrf17
 
 end module ocean_rough_mod
