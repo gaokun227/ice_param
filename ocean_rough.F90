@@ -31,7 +31,8 @@ use constants_mod, only: grav, vonkarm
 implicit none
 private
 
-public :: compute_ocean_roughness, fixed_ocean_roughness
+public :: compute_ocean_roughness, fixed_ocean_roughness, &
+          cal_z0_hwrf17, cal_zt_hwrf17, read_ocean_rough_scheme
 
 !-----------------------------------------------------------------------
 character(len=256) :: version = '$Id$'
@@ -104,7 +105,8 @@ contains
 !-----------------------------------------------------------------------
 
    real, dimension(size(ocean,1),size(ocean,2)) :: ustar2, xx1, xx2, w10 !miz
-   real, dimension(size(ocean,1),size(ocean,2)) :: ustar, xx3, u10n, z0, z1, alpha_v, reynolds_rough
+   real, dimension(size(ocean,1),size(ocean,2)) :: ustar, xx3, u10n, z0, zt, z1,  &
+                                                   alpha_v, reynolds_rough
    real:: zt1
    integer :: i, j, n, iter
    real :: ustar_min, m, b, u_max, rough_mom_init
@@ -228,6 +230,43 @@ contains
           rough_moist = 0.0
       endwhere
 
+   else if (trim(rough_scheme) == 'hwrf17') then
+
+      rough_mom_init = 1.e-03
+      ustar_min = 1.e-05
+      ustar(:,:) = u_star(:,:)
+      where (ocean)
+          ustar(:,:)  = max(ustar(:,:), ustar_min)
+          ustar2(:,:) = ustar(:,:)*ustar(:,:)
+          xx1(:,:)    = gnu/ustar(:,:)
+          xx2(:,:)    = ustar2(:,:)/grav
+          xx3(:,:)    = ustar(:,:)/vonkarm
+      endwhere
+
+      z0(:,:) = rough_mom_init
+      iter = 5
+
+      do j = 1, size(ocean, 2)
+        do i = 1, size(ocean, 1)
+           if ( ocean(i,j) ) then
+              do n = 1, iter
+               u10n(i,j) = xx3(i,j) * log(10 / z0(i,j))
+               call cal_z0_hwrf17(u10n(i,j), z0(i,j))
+              enddo
+              call cal_zt_hwrf17(u10n(i,j), zt(i,j))
+              rough_mom  (i,j) = z0(i,j)
+              rough_heat (i,j) = zt(i,j)
+              rough_moist(i,j) = rough_heat(i,j)
+           endif
+        enddo
+      enddo
+
+      where (.not. ocean)
+          rough_mom   = 0.0
+          rough_heat  = 0.0
+          rough_moist = 0.0
+      endwhere
+
    else
       call mpp_error(FATAL, '==>Error from ocean_rough_mod(compute_ocean_roughness): '//&
             'Unknown roughness scheme (case sensitive): ' //trim(rough_scheme))
@@ -287,7 +326,166 @@ contains
 
  end subroutine ocean_rough_init
 
+
 !#######################################################################
+
+ subroutine read_ocean_rough_scheme (ocean_rough_scheme)
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
+! to read in the ocean roughness scheme used
+!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
+
+  character(len=32), intent(inout) :: ocean_rough_scheme
+  integer :: ierr, io
+
+  read (input_nml_file, nml=ocean_rough_nml, iostat=io)
+  ierr = check_nml_error(io, 'ocean_rough_nml')
+  ocean_rough_scheme = rough_scheme
+
+ end subroutine read_ocean_rough_scheme
+
+!#######################################################################
+
+ subroutine cal_z0_hwrf17 (uref,z0)
+
+! This subroutine is orginally from HWRF model (2017 version, znot_m_v6)
+! Implemented here by Kun Gao & Baoqiang Xiang
+
+! Calculate areodynamical roughness over water with input 10-m wind
+! For low-to-moderate winds, try to match the Cd-U10 relationship from COARE V3.5 (Edson et al. 2013)
+! For high winds, try to fit available observational data
+!
+! uref(m/s)   :   wind speed at 10-m height
+! z0 (meter)  :   areodynamical roughness scale over water
+!
+
+    real, intent(in) :: uref
+    real, intent(out):: z0
+    real  :: p13, p12, p11, p10
+    real  :: p25, p24, p23, p22, p21, p20
+    real  :: p35, p34, p33, p32, p31, p30
+    real  :: p40
+
+    p13 = -1.296521881682694e-02
+    p12 =  2.855780863283819e-01
+    p11 = -1.597898515251717e+00
+    p10 = -8.396975715683501e+00
+
+    p25 =  3.790846746036765e-10
+    p24 =  3.281964357650687e-09
+    p23 =  1.962282433562894e-07
+    p22 = -1.240239171056262e-06
+    p21 =  1.739759082358234e-07
+    p20 =  2.147264020369413e-05
+
+    p35 =  1.840430200185075e-07
+    p34 = -2.793849676757154e-05
+    p33 =  1.735308193700643e-03
+    p32 = -6.139315534216305e-02
+    p31 =  1.255457892775006e+00
+    p30 = -1.663993561652530e+01
+
+    p40 =  4.579369142033410e-04
+
+    if (uref >= 0.0 .and.  uref <= 6.5 ) then
+      z0 = exp( p10 + p11*uref + p12*uref**2 + p13*uref**3)
+    elseif (uref > 6.5 .and. uref <= 15.7) then
+      z0 = p25*uref**5 + p24*uref**4 + p23*uref**3 + p22*uref**2 + p21*uref + p20
+    elseif (uref > 15.7 .and. uref <= 53.0) then
+      z0 = exp( p35*uref**5 + p34*uref**4 + p33*uref**3 + p32*uref**2 + p31*uref + p30 )
+    elseif ( uref > 53.0) then
+      z0 = p40
+    else
+      print*, 'Wrong input uref value:',uref
+    endif
+!
+ end subroutine cal_z0_hwrf17
+
+!#######################################################################
+
+ subroutine cal_zt_hwrf17 (uref,zt)
+
+! This subroutine is orginally from HWRF model (2017 version, znot_t_v6)
+! Implemented here by Kun Gao & Baoqiang Xiang
+
+! Calculate scalar roughness over water with input 10-m wind
+! For low-to-moderate winds, try to match the Ck-U10 relationship from COARE algorithm
+! For high winds, try to retain the Ck-U10 relationship of FY2015 HWRF
+!
+! uref(m/s)   :   wind speed at 10-m height
+! zt(meter)   :   scalar roughness scale over water
+!
+
+    real, intent(in) :: uref
+    real, intent(out):: zt
+
+    real  :: p00
+    real  :: p15, p14, p13, p12, p11, p10
+    real  :: p25, p24, p23, p22, p21, p20
+    real  :: p35, p34, p33, p32, p31, p30
+    real  :: p45, p44, p43, p42, p41, p40
+    real  :: p56, p55, p54, p53, p52, p51, p50
+    real  :: p60
+
+    p00 =  1.100000000000000e-04
+
+    p15 = -9.144581627678278e-10
+    p14 =  7.020346616456421e-08
+    p13 = -2.155602086883837e-06
+    p12 =  3.333848806567684e-05
+    p11 = -2.628501274963990e-04
+    p10 =  8.634221567969181e-04
+
+    p25 = -8.654513012535990e-12
+    p24 =  1.232380050058077e-09
+    p23 = -6.837922749505057e-08
+    p22 =  1.871407733439947e-06
+    p21 = -2.552246987137160e-05
+    p20 =  1.428968311457630e-04
+
+    p35 =  3.207515102100162e-12
+    p34 = -2.945761895342535e-10
+    p33 =  8.788972147364181e-09
+    p32 = -3.814457439412957e-08
+    p31 = -2.448983648874671e-06
+    p30 =  3.436721779020359e-05
+
+
+    p45 = -3.530687797132211e-11
+    p44 =  3.939867958963747e-09
+    p43 = -1.227668406985956e-08
+    p42 = -1.367469811838390e-05
+    p41 =  5.988240863928883e-04
+    p40 = -7.746288511324971e-03
+
+    p56 = -1.187982453329086e-13
+    p55 =  4.801984186231693e-11
+    p54 = -8.049200462388188e-09
+    p53 =  7.169872601310186e-07
+    p52 = -3.581694433758150e-05
+    p51 =  9.503919224192534e-04
+    p50 = -1.036679430885215e-02
+
+    p60 =  4.751256171799112e-05
+
+    if (uref >= 0.0 .and. uref < 5.9 ) then
+      zt = p00
+    elseif (uref >= 5.9 .and. uref <= 15.4) then
+      zt = p15*uref**5 + p14*uref**4 + p13*uref**3 + p12*uref**2 + p11*uref + p10
+    elseif (uref > 15.4 .and. uref <= 21.6) then
+      zt = p25*uref**5 + p24*uref**4 + p23*uref**3 + p22*uref**2 + p21*uref + p20
+    elseif (uref > 21.6 .and. uref <= 42.2) then
+      zt = p35*uref**5 + p34*uref**4 + p33*uref**3 + p32*uref**2 + p31*uref + p30
+    elseif ( uref > 42.2 .and. uref <= 53.3) then
+      zt = p45*uref**5 + p44*uref**4 + p43*uref**3 + p42*uref**2 + p41*uref + p40
+    elseif ( uref > 53.3 .and. uref <= 80.0) then
+      zt = p56*uref**6 + p55*uref**5 + p54*uref**4 + p53*uref**3 + p52*uref**2 + p51*uref + p50
+    elseif ( uref > 80.0) then
+      zt = p60
+    else
+      print*, 'Wrong input uref value:',uref
+    endif
+!
+  end subroutine cal_zt_hwrf17
 
 end module ocean_rough_mod
 
